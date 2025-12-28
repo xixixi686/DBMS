@@ -15,7 +15,7 @@ def run_experiment():
         cursor = conn.cursor()
         print("Successfully connected to Oracle Database!")
 
-        # 2. Initialize Data (10,000 Records) [cite: 138-139, 124]
+        # 2. Initialize Data (10,000 Records) 
         print("Cleaning up and generating 10,000 test records...")
         # Drop table if it exists
         cursor.execute("BEGIN EXECUTE IMMEDIATE 'DROP TABLE EMPLOYEE_RECORDS'; EXCEPTION WHEN OTHERS THEN NULL; END;")
