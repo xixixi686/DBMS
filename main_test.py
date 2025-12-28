@@ -4,8 +4,8 @@ import time
 # Configuration (Docker Local Environment)
 conn_params = {
     "user": "SYSTEM",
-    "password": "Password123", 
-    "dsn": "localhost:1521/XEPDB1"
+    "password": "Password123", #my docker password
+    "dsn": "localhost:1521/XEPDB1"  #localhost
 }
 
 def run_experiment():
