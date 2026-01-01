@@ -1,67 +1,79 @@
-import oracledb
+import sqlite3
 import time
+import os
 
-# Configuration (Docker Local Environment)
-conn_params = {
-    "user": "SYSTEM",
-    "password": "Password123", #my docker password
-    "dsn": "localhost:1521/XEPDB1"  #localhost
-}
+DB_NAME = "experiment.db"
 
 def run_experiment():
-    try:
-        # 1. Establish Connection 
-        conn = oracledb.connect(**conn_params)
-        cursor = conn.cursor()
-        print("Successfully connected to Oracle Database!")
+    print("-----Program started-----")
 
-        # 2. Initialize Data (10,000 Records) 
-        print("Cleaning up and generating 10,000 test records...")
-        # Drop table if it exists
-        cursor.execute("BEGIN EXECUTE IMMEDIATE 'DROP TABLE EMPLOYEE_RECORDS'; EXCEPTION WHEN OTHERS THEN NULL; END;")
-        
-        # Create table for testing
-        cursor.execute("""
-            CREATE TABLE EMPLOYEE_RECORDS (
-                emp_id NUMBER PRIMARY KEY,
-                dept_name VARCHAR2(50),
-                sensitive_info VARCHAR2(100)
+    if os.path.exists(DB_NAME):
+        os.remove(DB_NAME)
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    print("Database connected!")
+
+    #Create table
+    cursor.execute("""
+        CREATE TABLE EMPLOYEE_RECORDS (
+            emp_id INTEGER PRIMARY KEY,
+            dept_name TEXT,
+            sensitive_info TEXT
+        )
+    """)
+
+    #Insert Dataset
+    ROWS = 10000 
+    data = []
+
+    for i in range(1, ROWS + 1):
+        dept = "FINANCE" if i % 3 == 0 else "HR"
+        data.append((i, dept, f"Secret_{i}"))
+
+    cursor.executemany(
+        "INSERT INTO EMPLOYEE_RECORDS VALUES (?, ?, ?)",
+        data
+    )
+    conn.commit()
+    print("Data insert.")
+
+    ITERATIONS = 50 
+
+    #RBAC
+    print("\nRunning RBAC...")
+    start = time.perf_counter()
+
+    for _ in range(ITERATIONS):
+        cursor.execute(
+            "SELECT * FROM EMPLOYEE_RECORDS WHERE dept_name='FINANCE'"
+        )
+        cursor.fetchall()
+
+    rbac_latency = ((time.perf_counter() - start) / ITERATIONS) * 1000
+    print(f"RBAC Average Latency: {rbac_latency:.4f} ms")
+
+    #ABAC
+    print("\nRunning ABAC...")
+    start = time.perf_counter()
+
+    for _ in range(ITERATIONS):
+        cursor.execute("SELECT * FROM EMPLOYEE_RECORDS")
+        records = cursor.fetchall()
+
+        for r in records:
+            _ = (
+                r[1] == "FINANCE"
+                and r[0] % 2 == 0
+                and len(r[2]) > 6
             )
-        """)
-        
-        # Batch insert synthetic data
-        for i in range(1, 10001):
-            dept = 'FINANCE' if i % 3 == 0 else 'HR'
-            cursor.execute("INSERT INTO EMPLOYEE_RECORDS VALUES (:1, :2, :3)", [i, dept, f'Secret_{i}'])
-        
-        conn.commit()
-        print("Data initialization complete.")
 
-        # 3. Performance Testing 
-        results = {}
-        scenarios = {
-            "RBAC (Static)": "SELECT * FROM EMPLOYEE_RECORDS WHERE dept_name = 'FINANCE'",
-            "ABAC (Dynamic)": "SELECT * FROM EMPLOYEE_RECORDS WHERE dept_name = 'FINANCE' AND TO_CHAR(SYSDATE, 'HH24') BETWEEN '09' AND '18'"
-        }
+    abac_latency = ((time.perf_counter() - start) / ITERATIONS) * 1000
+    print(f"ABAC Average Latency: {abac_latency:.4f} ms")
 
-        print("\nStarting performance benchmarking...")
-        for name, sql in scenarios.items():
-            start_time = time.perf_counter()
-            for _ in range(1000):
-                cursor.execute(sql)
-                cursor.fetchall()
-            
-            # Calculate average latency in milliseconds (ms)
-            avg_latency = ((time.perf_counter() - start_time) / 1000) * 1000 
-            results[name] = avg_latency
-            print(f"{name} Average Latency: {avg_latency:.4f} ms")
-
-        cursor.close()
-        conn.close()
-        return results
-
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    cursor.close()
+    conn.close()
+    print("\n-----Program finished-----")
 
 if __name__ == "__main__":
     run_experiment()
