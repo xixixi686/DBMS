@@ -1,5 +1,6 @@
 import sqlite3
 import time
+import psutil
 import os
 
 DB_NAME = "experiment.db"
