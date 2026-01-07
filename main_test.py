@@ -2,8 +2,10 @@ from pymongo import MongoClient
 import time
 import psutil
 import os
+import statistics
 
-DB_NAME = "experiment.db"
+DB_NAME = "experimentDB"
+COLLECTION_NAME = "employee_records"
 
 def run_experiment():
     print("-----Program started-----")
@@ -16,7 +18,6 @@ def run_experiment():
     collection.drop()
 
     print("Database connected!")
-
 
 
     #Insert Dataset
@@ -39,53 +40,65 @@ def run_experiment():
         print("Data inserted.")
     
         ITERATIONS = 50 
-    
-    
-        #RBAC
-        print("\nRunning RBAC...")
-        process = psutil.Process(os.getpid()) #test for system overhead
-        cpu_start = process.cpu_times()  
+        REPEATS = 5
         
-        start = time.perf_counter() #test for latency
-    
+        rbac_latencies = []
+        rbac_overheads = []
+        abac_latencies = []
+        abac_overheads = []
         
-        for _ in range(ITERATIONS):
-            rbac_allowed_records = list(collection.find({"dept_name": "FINANCE"}))
+        for repeat in range(REPEATS):
+            #RBAC
+            print("\nRunning RBAC...")
+            process = psutil.Process(os.getpid()) #test for system overhead
+            cpu_start = process.cpu_times()  
             
-
-        rbac_latency = ((time.perf_counter() - start) / ITERATIONS) * 1000
-        cpu_end = process.cpu_times()
-        rbac_cpu_time = (((cpu_end.user - cpu_start.user) + (cpu_end.system - cpu_start.system))/ITERATIONS)* 1000
-        rbac_overhead =  rbac_latency - rbac_cpu_time
+            start = time.perf_counter() #test for latency
         
-        print(f"RBAC Average Latency: {rbac_latency:.4f} ms")
-        print(f"RBAC System Overhead: {rbac_overhead:.4f} ms")
-        print(f"Total records: {len(list(collection.find()))}\nAccessible by policy (RBAC): {len(rbac_allowed_records)}")
-    
-        #ABAC
-        print("\nRunning ABAC...")
-        process = psutil.Process(os.getpid())
-        cpu_start = process.cpu_times() 
-    
-        start = time.perf_counter()
-        for _ in range(ITERATIONS):
-            records = list(collection.find())
             
-            abac_allowed_records = [
-                r for r in records
-                    if
-                        r["dept_name"] == "FINANCE"
-                        and r["emp_id"] % 2 == 0
-                        and len(r["sensitive_info"]) > 6
-                ]
+            for _ in range(ITERATIONS):
+                rbac_allowed_records = list(collection.find({"dept_name": "FINANCE"}))
+                
     
-        abac_latency = ((time.perf_counter() - start) / ITERATIONS) * 1000
-        cpu_end = process.cpu_times()
-        abac_cpu_time = (((cpu_end.user - cpu_start.user) + (cpu_end.system - cpu_start.system))/ITERATIONS)* 1000
-        abac_overhead = abac_latency - abac_cpu_time
+            rbac_latency = ((time.perf_counter() - start) / ITERATIONS) * 1000
+            cpu_end = process.cpu_times()
+            rbac_overhead = (((cpu_end.user - cpu_start.user) + (cpu_end.system - cpu_start.system))/ITERATIONS)* 1000
+            
+            rbac_latencies.append(rbac_latency)
+            rbac_overheads.append(rbac_overhead)
+            
         
-        print(f"ABAC Average Latency: {abac_latency:.4f} ms")
-        print(f"ABAC System Overhead: {abac_overhead:.4f} ms")
+            #ABAC
+            print("\nRunning ABAC...")
+            process = psutil.Process(os.getpid())
+            cpu_start = process.cpu_times() 
+        
+            start = time.perf_counter()
+            for _ in range(ITERATIONS):
+                records = list(collection.find())
+                
+                abac_allowed_records = [
+                    r for r in records
+                        if
+                            r["dept_name"] == "FINANCE"
+                            and r["emp_id"] % 2 == 0
+                            and len(r["sensitive_info"]) > 6
+                    ]
+        
+            abac_latency = ((time.perf_counter() - start) / ITERATIONS) * 1000
+            cpu_end = process.cpu_times()
+            abac_overhead = (((cpu_end.user - cpu_start.user) + (cpu_end.system - cpu_start.system))/ITERATIONS)* 1000
+            
+            abac_latencies.append(abac_latency)
+            abac_overheads.append(abac_overhead)
+            
+        print("\n-----Results-----")
+        print(f"RBAC Average Latency: {statistics.mean(rbac_latencies):.4f} ms")
+        print(f"RBAC System Overhead: {statistics.mean(rbac_overheads):.4f} ms")
+        print(f"Total records: {len(list(collection.find()))}\nAccessible by policy (RBAC): {len(rbac_allowed_records)}\n")
+        
+        print(f"ABAC Average Latency: {statistics.mean(abac_latencies):.4f} ms")
+        print(f"ABAC System Overhead: {statistics.mean(abac_overheads):.4f} ms")
         print(f"Total records: {len(records)}\nAccessible by policy (ABAC): {len(abac_allowed_records)}")
     
     client.close()
